@@ -1,11 +1,16 @@
 package com.retailsystem.cart.exception;
 
+import com.mongodb.MongoExecutionTimeoutException;
+import com.mongodb.MongoSocketException;
+import com.mongodb.MongoTimeoutException;
 import jakarta.validation.ConstraintViolationException;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.dao.QueryTimeoutException;
+import org.springframework.data.mongodb.UncategorizedMongoDbException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -46,12 +51,18 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({DataAccessResourceFailureException.class, QueryTimeoutException.class})
     public ProblemDetail handleDatabaseUnavailable(RuntimeException ex) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
-                HttpStatus.SERVICE_UNAVAILABLE,
-                "Shopping cart storage is temporarily unavailable; please retry shortly"
-        );
-        problemDetail.setTitle("Service Temporarily Unavailable");
-        return problemDetail;
+        return serviceUnavailableProblemDetail();
+    }
+
+    @ExceptionHandler(UncategorizedMongoDbException.class)
+    public ProblemDetail handleUncategorizedMongo(UncategorizedMongoDbException ex) {
+        Throwable cause = ex.getCause();
+        if (cause instanceof MongoExecutionTimeoutException
+                || cause instanceof MongoTimeoutException
+                || cause instanceof MongoSocketException) {
+            return serviceUnavailableProblemDetail();
+        }
+        return internalErrorProblemDetail();
     }
 
     @ExceptionHandler(DomainValidationException.class)
@@ -65,6 +76,7 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleMethodArgumentNotValid(MethodArgumentNotValidException ex) {
         String detail = ex.getBindingResult().getFieldErrors().stream()
                 .map(FieldError::getDefaultMessage)
+                .filter(Objects::nonNull)
                 .collect(Collectors.joining("; "));
         if (detail.isBlank()) {
             detail = "Invalid request payload";
@@ -94,14 +106,43 @@ public class GlobalExceptionHandler {
         return problemDetail;
     }
 
-    @ExceptionHandler({
-            ConstraintViolationException.class,
-            HandlerMethodValidationException.class,
-            MissingServletRequestParameterException.class
-    })
-    public ProblemDetail handleBadRequest(Exception ex) {
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ProblemDetail handleMissingRequestParameter(MissingServletRequestParameterException ex) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_REQUEST,
+                "Missing required parameter: " + ex.getParameterName()
+        );
         problemDetail.setTitle("Bad Request");
+        return problemDetail;
+    }
+
+    @ExceptionHandler({ConstraintViolationException.class, HandlerMethodValidationException.class})
+    public ProblemDetail handleBadRequest(Exception ex) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid request parameters");
+        problemDetail.setTitle("Bad Request");
+        return problemDetail;
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ProblemDetail handleUnexpectedError(Exception ex) {
+        return internalErrorProblemDetail();
+    }
+
+    private ProblemDetail serviceUnavailableProblemDetail() {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "Shopping cart storage is temporarily unavailable; please retry shortly"
+        );
+        problemDetail.setTitle("Service Temporarily Unavailable");
+        return problemDetail;
+    }
+
+    private ProblemDetail internalErrorProblemDetail() {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "An unexpected internal error occurred"
+        );
+        problemDetail.setTitle("Internal Server Error");
         return problemDetail;
     }
 }

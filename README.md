@@ -6,7 +6,7 @@ A stateless Spring Boot 4.1 / Java 26 microservice backed by MongoDB 8.0 for man
 
 ## 1. Architecture & Design Decisions
 
-The service uses a **Pragmatic Layered Architecture with Rich Entities**:
+The service uses a **Pragmatic Layered Architecture with Plain Entities**:
 
 ```text
 com.retailsystem.cart
@@ -28,15 +28,15 @@ com.retailsystem.cart
 
 ### Key Engineering Highlights
 
-- **Dedicated Validation & MapStruct Mapping Layers**: `ShoppingCart`, `CartItem`, and `Price` stay lean in `entity`, all `dto.write` and `dto.read` records are pure data structures with zero mapping logic, `CartMapper` (`@Mapper` via MapStruct) generates compile-time mappings, and `CartValidator` / `StatisticsValidator` in `validation` enforce all domain rules (`BR1`, `BR2`, cart state transitions, and time-window invariants).
-- **Separated Write and Read Models**: Inbound commands (`dto.write`) and outbound queries (`dto.read`) use distinct Java `record` types. Polymorphic prices use `@JsonTypeInfo` (`ONE_TIME` vs `RECURRING`) on the REST boundary and `@TypeAlias` in MongoDB.
+- **Dedicated Validation & MapStruct Mapping Layers**: `dto.write` and `dto.read` records are pure data structures, `CartMapper` (`@Mapper` via MapStruct) generates compile-time mappings, `ShoppingCart`/`CartItem`/`Price` are plain data holders, and `CartValidator` / `StatisticsValidator` in `validation` enforce input bounds, `BR1`/`BR2`, cart state transitions, and time-window invariants.
+- **Separated Write and Read Models**: Inbound commands (`dto.write`) and outbound queries (`dto.read`) use distinct Java `record` types (`ONE_TIME` vs `RECURRING` via `PriceType`).
 - **Exact Monetary Precision**: All price amounts use `BigDecimal` in Java and are stored as BSON `Decimal128` in MongoDB via custom converters.
 - **Single Active Cart Guarantee & Optimistic Concurrency**:
   - A partial unique index (`idx_active_customer_cart`) on `{ customerId: 1 }` with filter `{ status: "ACTIVE" }` guarantees at the database level that a customer can have at most one `ACTIVE` cart at any time, while preserving unlimited historical `CHECKED_OUT` and `EVICTED` carts.
-  - `@Version` optimistic locking protects concurrent cart updates and returns `409 Conflict` (`ProblemDetail`) on write collisions.
+  - `@Version` optimistic locking with automatic bounded concurrency retries across cart mutations protects concurrent updates and returns `409 Conflict` (`ProblemDetail`) when retries are exhausted.
 - **In-Database Offer Statistics & Retargeting Pipeline**:
   - Backed by compound multikey index `idx_offer_statistics` on `{ "items.offerId": 1, "items.action": 1, "items.addedAt": 1, "status": 1 }`.
-  - Executes a 5-stage MongoDB aggregation pipeline (`$match` -> `$unwind` -> `$match` -> `$group` -> `$project` with `$setDifference`) directly inside MongoDB without loading cart collections into JVM memory.
+  - Executes a 5-stage MongoDB aggregation pipeline (`$match` -> `$unwind` -> `$match` -> `$group` by `customerId` -> `$facet` for counts and bounded `$limit` retargeting leads) directly inside MongoDB with `allowDiskUse(true)` and `maxTime(5s)`.
   - Computes `soldCount`, `activeCartCount`, `evictedCartCount`, `totalAddedCount`, and `retargetingCustomerIds` (customers who placed the offer in an `ACTIVE` or `EVICTED` cart during `[from, to]` and did **not** purchase it in a `CHECKED_OUT` cart during the same period).
 
 ---
@@ -61,7 +61,7 @@ When the application is running, interactive OpenAPI / Swagger documentation is 
 
 | Method | Path | Query Parameters | Status Codes |
 |--------|------|------------------|--------------|
-| `GET` | `/api/v1/statistics/offers` | `offerId` (`String`), `action` (`ADD`\|`MODIFY`\|`DELETE`), `from` (`ISO-8601 Instant`), `to` (`ISO-8601 Instant`) | `200 OK`, `400 Bad Request` |
+| `GET` | `/api/v1/statistics/offers` | `offerId` (`String`), `action` (`ADD`\|`MODIFY`\|`DELETE`), `from` (`ISO-8601 Instant`), `to` (`ISO-8601 Instant`), optional `retargetingLimit` (`1`–`50000`, default `10000`) | `200 OK`, `400 Bad Request` |
 
 #### Example: Add Item to Cart
 

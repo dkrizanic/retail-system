@@ -11,7 +11,11 @@ import com.retailsystem.cart.mapper.CartMapper;
 import com.retailsystem.cart.repository.ShoppingCartRepository;
 import com.retailsystem.cart.service.CartService;
 import com.retailsystem.cart.validation.CartValidator;
+import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Supplier;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
@@ -19,7 +23,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class CartServiceImpl implements CartService {
 
-    private static final int MAX_CONCURRENCY_RETRIES = 3;
+    private static final int MAX_CONCURRENCY_RETRIES = 8;
 
     private final ShoppingCartRepository shoppingCartRepository;
     private final CartValidator cartValidator;
@@ -37,67 +41,121 @@ public class CartServiceImpl implements CartService {
 
     @Override
     public ShoppingCartResponse getActiveCart(String customerId) {
-        ShoppingCart cart = findActiveCartOrThrow(customerId);
+        ShoppingCart cart = findActiveCartOrThrow(cartValidator.normalizeCustomerId(customerId));
         return cartMapper.toResponse(cart);
     }
 
     @Override
     public ShoppingCartResponse addItem(String customerId, AddCartItemRequest request) {
+        String normalizedCustomerId = cartValidator.normalizeCustomerId(customerId);
         List<Price> prices = request != null ? cartMapper.toPriceEntities(request.prices()) : null;
         cartValidator.validateAddItem(
-                customerId,
+                normalizedCustomerId,
                 request != null ? request.offerId() : null,
                 request != null ? request.action() : null,
                 prices
         );
-        CartItem newItem = CartItem.create(request.offerId(), request.action(), prices);
+        CartItem newItem = new CartItem(
+                UUID.randomUUID().toString(),
+                request.offerId().trim(),
+                request.action(),
+                List.copyOf(prices),
+                Instant.now()
+        );
 
-        for (int attempt = 1; ; attempt++) {
-            try {
-                ShoppingCart cart = shoppingCartRepository
-                        .findByCustomerIdAndStatus(customerId, CartStatus.ACTIVE)
-                        .orElseGet(() -> ShoppingCart.createNew(customerId));
-                cart.addItem(newItem);
-                return cartMapper.toResponse(shoppingCartRepository.save(cart));
-            } catch (DuplicateKeyException | OptimisticLockingFailureException ex) {
-                if (attempt >= MAX_CONCURRENCY_RETRIES) {
-                    throw ex;
-                }
-            }
-        }
+        return executeWithConcurrencyRetry(() -> {
+            ShoppingCart cart = shoppingCartRepository
+                    .findByCustomerIdAndStatus(normalizedCustomerId, CartStatus.ACTIVE)
+                    .orElseGet(() -> newActiveCart(normalizedCustomerId));
+            cartValidator.validateCartCapacity(cart);
+            cart.getItems().add(newItem);
+            cart.setUpdatedAt(Instant.now());
+            return cartMapper.toResponse(shoppingCartRepository.save(cart));
+        });
     }
 
     @Override
     public ShoppingCartResponse removeItem(String customerId, String itemId) {
-        ShoppingCart cart = findActiveCartOrThrow(customerId);
-        cartValidator.validateItemRemoval(cart, itemId);
-        return cartMapper.toResponse(shoppingCartRepository.save(cart));
+        String normalizedCustomerId = cartValidator.normalizeCustomerId(customerId);
+        return executeWithConcurrencyRetry(() -> {
+            ShoppingCart cart = findActiveCartOrThrow(normalizedCustomerId);
+            cartValidator.validateItemRemoval(cart, itemId);
+            cart.getItems().removeIf(item -> item.itemId().equals(itemId.trim()));
+            cart.setUpdatedAt(Instant.now());
+            return cartMapper.toResponse(shoppingCartRepository.save(cart));
+        });
     }
 
     @Override
     public void evictCart(String customerId) {
-        ShoppingCart cart = findActiveCartOrThrow(customerId);
-        cartValidator.validateActiveStatus(cart);
-        if (cart.getItems().isEmpty()) {
-            shoppingCartRepository.delete(cart);
-        } else {
-            cart.markEvicted();
-            shoppingCartRepository.save(cart);
-        }
+        String normalizedCustomerId = cartValidator.normalizeCustomerId(customerId);
+        executeWithConcurrencyRetry(() -> {
+            ShoppingCart cart = findActiveCartOrThrow(normalizedCustomerId);
+            cartValidator.validateActiveStatus(cart);
+            if (cart.getItems().isEmpty()) {
+                shoppingCartRepository.delete(cart);
+            } else {
+                completeCart(cart, CartStatus.EVICTED);
+                shoppingCartRepository.save(cart);
+            }
+            return null;
+        });
     }
 
     @Override
     public ShoppingCartResponse checkoutCart(String customerId) {
-        ShoppingCart cart = findActiveCartOrThrow(customerId);
-        cartValidator.validateCheckout(cart);
-        cart.markCheckedOut();
-        return cartMapper.toResponse(shoppingCartRepository.save(cart));
+        String normalizedCustomerId = cartValidator.normalizeCustomerId(customerId);
+        return executeWithConcurrencyRetry(() -> {
+            ShoppingCart cart = findActiveCartOrThrow(normalizedCustomerId);
+            cartValidator.validateCheckout(cart);
+            completeCart(cart, CartStatus.CHECKED_OUT);
+            return cartMapper.toResponse(shoppingCartRepository.save(cart));
+        });
     }
 
-    private ShoppingCart findActiveCartOrThrow(String customerId) {
-        cartValidator.validateCustomerId(customerId);
+    private ShoppingCart newActiveCart(String normalizedCustomerId) {
+        Instant now = Instant.now();
+        ShoppingCart cart = new ShoppingCart();
+        cart.setId(UUID.randomUUID().toString());
+        cart.setCustomerId(normalizedCustomerId);
+        cart.setStatus(CartStatus.ACTIVE);
+        cart.setCreatedAt(now);
+        cart.setUpdatedAt(now);
+        return cart;
+    }
+
+    private void completeCart(ShoppingCart cart, CartStatus finalStatus) {
+        Instant now = Instant.now();
+        cart.setStatus(finalStatus);
+        cart.setUpdatedAt(now);
+        cart.setCompletedAt(now);
+    }
+
+    private ShoppingCart findActiveCartOrThrow(String normalizedCustomerId) {
         return shoppingCartRepository
-                .findByCustomerIdAndStatus(customerId, CartStatus.ACTIVE)
-                .orElseThrow(() -> new ResourceNotFoundException("Active shopping cart not found for customer: " + customerId));
+                .findByCustomerIdAndStatus(normalizedCustomerId, CartStatus.ACTIVE)
+                .orElseThrow(() -> new ResourceNotFoundException("Active shopping cart not found for customer: " + normalizedCustomerId));
+    }
+
+    private <T> T executeWithConcurrencyRetry(Supplier<T> operation) {
+        for (int attempt = 1; ; attempt++) {
+            try {
+                return operation.get();
+            } catch (DuplicateKeyException | OptimisticLockingFailureException ex) {
+                if (attempt >= MAX_CONCURRENCY_RETRIES) {
+                    throw ex;
+                }
+                pauseBrieflyBeforeRetry(attempt);
+            }
+        }
+    }
+
+    private void pauseBrieflyBeforeRetry(int attempt) {
+        try {
+            long delayMs = ThreadLocalRandom.current().nextLong(3L, 6L + Math.min(attempt, 4) * 4L);
+            Thread.sleep(delayMs);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+        }
     }
 }

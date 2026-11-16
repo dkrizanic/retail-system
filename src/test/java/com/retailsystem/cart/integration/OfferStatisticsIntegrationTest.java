@@ -30,6 +30,9 @@ class OfferStatisticsIntegrationTest extends BaseIntegrationTest {
                 cartWithItems("cust-1", CartStatus.CHECKED_OUT, List.of(item("tv-55", ItemAction.ADD, insideWindow2)), insideWindow2),
                 cartWithItems("cust-2", CartStatus.ACTIVE, List.of(
                         item("tv-55", ItemAction.ADD, insideWindow1),
+                        item("tv-55", ItemAction.ADD, insideWindow2),
+                        item("tv-55", ItemAction.MODIFY, insideWindow1),
+                        item("tv-55", ItemAction.ADD, beforeWindow),
                         item("soundbar-1", ItemAction.ADD, insideWindow1)
                 ), insideWindow1),
                 cartWithItems("cust-3", CartStatus.EVICTED, List.of(item("tv-55", ItemAction.ADD, insideWindow2)), insideWindow2),
@@ -49,12 +52,20 @@ class OfferStatisticsIntegrationTest extends BaseIntegrationTest {
         assertThat(body.offerId()).isEqualTo("tv-55");
         assertThat(body.action()).isEqualTo(ItemAction.ADD);
         assertThat(body.soldCount()).isEqualTo(2L);
-        assertThat(body.activeCartCount()).isEqualTo(1L);
+        assertThat(body.activeCartCount()).isEqualTo(2L);
         assertThat(body.evictedCartCount()).isEqualTo(2L);
-        assertThat(body.totalAddedCount()).isEqualTo(5L);
+        assertThat(body.totalAddedCount()).isEqualTo(6L);
         assertThat(body.retargetingCustomerIds())
                 .containsExactly("cust-2", "cust-3")
                 .doesNotContain("cust-1", "cust-4", "cust-5", "cust-6", "cust-7");
+
+        ResponseEntity<OfferStatisticsResponse> limitedResponse = queryStatistics(
+                "tv-55", "ADD", windowStart.toString(), windowEnd.toString(), 1, OfferStatisticsResponse.class
+        );
+        assertThat(limitedResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(limitedResponse.getBody()).isNotNull();
+        assertThat(limitedResponse.getBody().totalAddedCount()).isEqualTo(6L);
+        assertThat(limitedResponse.getBody().retargetingCustomerIds()).containsExactly("cust-2");
     }
 
     @Test

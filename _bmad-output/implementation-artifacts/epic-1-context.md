@@ -8,7 +8,7 @@ Deliver the complete Shopping Cart microservice that manages active customer sho
 
 ## Stories
 
-- Story 1.1: Project Foundation and Rich Domain Entities
+- Story 1.1: Project Foundation and Plain Domain Entities
 - Story 1.2: MongoDB Persistence and Cart Lifecycle REST API
 - Story 1.3: Offer Sales and Retargeting Statistics Aggregation Pipeline
 
@@ -28,14 +28,14 @@ Deliver the complete Shopping Cart microservice that manages active customer sho
 ## Technical Decisions
 
 - **Stack:** Java `26` (`25 LTS` compatible), Spring Boot `4.1.2`, Maven (`mvnw`), MongoDB `8.0` (Docker & Testcontainers with `@ServiceConnection`).
-- **AD-1 (Rich Entities & Isolated Enums):** Rich entities (`ShoppingCart`, `CartItem`, `Price`, `OneTimePrice`, `RecurringPrice`) live in `com.retailsystem.cart.entity` and enums (`ItemAction`, `RecurrenceUnit`, `CartStatus`) live in `com.retailsystem.cart.enums`, without duplicate model/document mapper bloat. All invariants throw `DomainValidationException`.
+- **AD-1 (Plain Entities & Isolated Enums):** Plain entities with no logic (`ShoppingCart`, `CartItem`, `Price`) live in `com.retailsystem.cart.entity` and enums (`ItemAction`, `RecurrenceUnit`, `CartStatus`) live in `com.retailsystem.cart.enums`, without duplicate model/document mapper bloat. All rules are enforced in `CartValidator` and throw `DomainValidationException`.
 - **AD-2 (Separated Write & Read DTOs):** Inbound payloads use immutable records in `dto.write` (`AddCartItemRequest`, sealed `PriceWriteDto`); outbound payloads use immutable records in `dto.read` (`ShoppingCartResponse`, `CartItemResponse`, sealed `PriceReadDto`, `OfferStatisticsResponse`).
 - **AD-3 (Interface-Driven Boundaries):** Service interfaces (`CartService`, `StatisticsService`) live in `service` with implementations in `service.impl`; repository interfaces (`ShoppingCartRepository`, `CustomOfferStatisticsRepository`) live in `repository` with custom aggregation implementation in `repository.impl`.
 - **AD-4 (Dual Query Strategy):** Simple cart lookups use Spring Data derived methods (`findByCustomerIdAndStatus`); statistics queries use `MongoTemplate` aggregation pipeline (`$match` -> `$unwind` -> `$match` -> `$group` -> `$project` with `$setDifference`).
 - **AD-5 (MongoDB Schema & Indexes):** Single `shopping_carts` collection with partial unique index on `{ customerId: 1 }` where `status == "ACTIVE"`, compound index on `{ "items.offerId": 1, "items.action": 1, "items.addedAt": 1, "status": 1 }`, `@Version` optimistic locking, and `Decimal128 <-> BigDecimal` converters.
-- **AD-6 (Code & Testing Discipline):** Zero inline AI comments or redundant Javadocs in `.java` files. Unit tests in `src/test/java/com/retailsystem/cart/unit` cover entity invariants without Spring context; integration tests in `src/test/java/com/retailsystem/cart/integration` use Testcontainers MongoDB.
+- **AD-6 (Code & Testing Discipline):** Zero inline AI comments or redundant Javadocs in `.java` files. Unit tests in `src/test/java/com/retailsystem/cart/unit` cover validator rules without Spring context; integration tests in `src/test/java/com/retailsystem/cart/integration` use Testcontainers MongoDB.
 
 ## Cross-Story Dependencies
 
-- Story 1.1 defines the Maven build, rich entities (`ShoppingCart`, `CartItem`, `Price`), enums, exceptions, and repository interfaces required by Story 1.2 and Story 1.3.
+- Story 1.1 defines the Maven build, plain entities (`ShoppingCart`, `CartItem`, `Price`), enums, exceptions, and repository interfaces required by Story 1.2 and Story 1.3.
 - Story 1.2 implements the MongoDB persistence, indexes, and cart lifecycle endpoints that populate the `shopping_carts` collection queried by Story 1.3.

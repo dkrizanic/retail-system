@@ -11,6 +11,7 @@ import com.retailsystem.cart.enums.PriceType;
 import com.retailsystem.cart.enums.RecurrenceUnit;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -55,21 +56,24 @@ public final class CartTestFixtures {
         );
     }
 
+    public static ShoppingCart emptyCart(String customerId) {
+        return cartWithItems(customerId, CartStatus.ACTIVE, new ArrayList<>(), Instant.now());
+    }
+
     public static ShoppingCart cartWithItems(
             String customerId,
             CartStatus status,
             List<CartItem> items,
             Instant timestamp
     ) {
-        return new ShoppingCart(
-                UUID.randomUUID().toString(),
-                customerId,
-                status,
-                items,
-                timestamp,
-                timestamp,
-                status == CartStatus.ACTIVE ? null : timestamp,
-                null
-        );
+        ShoppingCart cart = new ShoppingCart();
+        cart.setId(UUID.randomUUID().toString());
+        cart.setCustomerId(customerId);
+        cart.setStatus(status);
+        cart.setItems(new ArrayList<>(items));
+        cart.setCreatedAt(timestamp);
+        cart.setUpdatedAt(timestamp);
+        cart.setCompletedAt(status == CartStatus.ACTIVE ? null : timestamp);
+        return cart;
     }
 }

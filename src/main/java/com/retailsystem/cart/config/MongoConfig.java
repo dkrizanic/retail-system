@@ -1,6 +1,7 @@
 package com.retailsystem.cart.config;
 
 import com.retailsystem.cart.entity.ShoppingCart;
+import com.retailsystem.cart.exception.DomainValidationException;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.util.List;
@@ -59,7 +60,11 @@ public class MongoConfig {
 
         @Override
         public Decimal128 convert(BigDecimal source) {
-            return new Decimal128(source.round(MathContext.DECIMAL128));
+            try {
+                return new Decimal128(source.round(MathContext.DECIMAL128));
+            } catch (NumberFormatException | ArithmeticException ex) {
+                throw new DomainValidationException("Price value is out of supported decimal range");
+            }
         }
     }
 

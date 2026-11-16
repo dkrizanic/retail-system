@@ -98,14 +98,30 @@ public abstract class BaseIntegrationTest {
             String to,
             Class<T> responseType
     ) {
+        return queryStatistics(offerId, action, from, to, null, responseType);
+    }
+
+    protected <T> ResponseEntity<T> queryStatistics(
+            String offerId,
+            String action,
+            String from,
+            String to,
+            Integer retargetingLimit,
+            Class<T> responseType
+    ) {
         return restClient.get()
-                .uri(uriBuilder -> uriBuilder
-                        .path("/api/v1/statistics/offers")
-                        .queryParam("offerId", offerId)
-                        .queryParam("action", action)
-                        .queryParam("from", from)
-                        .queryParam("to", to)
-                        .build())
+                .uri(uriBuilder -> {
+                    var builder = uriBuilder
+                            .path("/api/v1/statistics/offers")
+                            .queryParam("offerId", offerId)
+                            .queryParam("action", action)
+                            .queryParam("from", from)
+                            .queryParam("to", to);
+                    if (retargetingLimit != null) {
+                        builder.queryParam("retargetingLimit", retargetingLimit);
+                    }
+                    return builder.build();
+                })
                 .retrieve()
                 .toEntity(responseType);
     }

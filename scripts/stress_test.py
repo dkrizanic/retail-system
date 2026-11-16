@@ -12,10 +12,27 @@ BASE_URL = "http://localhost:8080"
 TOTAL_SEED_CARTS = 100_000
 CONCURRENT_HTTP_REQUESTS = 2_000
 CONCURRENCY_WORKERS = 32
+SAME_CUSTOMER_CONTENTION_THREADS = 12
+
+
+def cleanup_stress_data() -> None:
+    cleanup_script = """
+    const res = db.shopping_carts.deleteMany({
+        customerId: { $regex: /^stress-(seed|http-cust|race)-/ }
+    });
+    print("Cleaned previous stress docs: " + res.deletedCount);
+    """
+    subprocess.run(
+        [
+            "docker", "exec", "-i", "shopping-cart-mongodb",
+            "mongosh", "shopping_cart_db", "--quiet", "--eval", cleanup_script
+        ],
+        check=True
+    )
 
 
 def seed_large_dataset_in_mongodb(total_carts: int) -> float:
-    print(f"\n[1/3] Seeding {total_carts:,} shopping carts (~{total_carts * 2:,} items) into MongoDB...")
+    print(f"\n[1/4] Seeding {total_carts:,} shopping carts (~{total_carts * 2:,} items) into MongoDB...")
     mongosh_script = f"""
     const total = {total_carts};
     const batchSize = 10000;
@@ -23,7 +40,7 @@ def seed_large_dataset_in_mongodb(total_carts: int) -> float:
     const actions = ["ADD", "MODIFY", "DELETE"];
     const statuses = ["ACTIVE", "CHECKED_OUT", "EVICTED"];
 
-    db.shopping_carts.deleteMany({{ customerId: /^stress-seed-/ }});
+    db.shopping_carts.deleteMany({{ customerId: /^stress-(seed|http-cust|race)-/ }});
 
     let inserted = 0;
     for (let b = 0; b < total / batchSize; b++) {{
@@ -142,7 +159,7 @@ def percentile(sorted_values: list[float], pct: float) -> float:
 
 def run_concurrent_http_stress() -> dict:
     flows = CONCURRENT_HTTP_REQUESTS // 3
-    print(f"\n[2/3] Running {flows * 3:,} concurrent HTTP API requests ({flows:,} full cart lifecycles across {CONCURRENCY_WORKERS} threads)...")
+    print(f"\n[2/4] Running {flows * 3:,} concurrent HTTP API requests ({flows:,} full cart lifecycles across {CONCURRENCY_WORKERS} threads)...")
     all_latencies: list[float] = []
     start = time.perf_counter()
 
@@ -173,8 +190,45 @@ def run_concurrent_http_stress() -> dict:
     return metrics
 
 
+def run_same_customer_race_test() -> dict:
+    customer_id = f"stress-race-{random.randint(100000, 999999)}"
+    print(f"\n[3/4] Running {SAME_CUSTOMER_CONTENTION_THREADS} simultaneous addItem requests on the SAME customer ({customer_id})...")
+
+    def add_once(idx: int) -> tuple[int, float]:
+        payload = {
+            "offerId": f"race-offer-{idx}",
+            "action": "ADD",
+            "prices": [{"type": "ONE_TIME", "value": 19.99}]
+        }
+        status, lat, _ = http_request("POST", f"/api/v1/carts/{customer_id}/items", payload)
+        return status, lat
+
+    statuses = []
+    latencies = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=SAME_CUSTOMER_CONTENTION_THREADS) as pool:
+        futures = [pool.submit(add_once, i) for i in range(SAME_CUSTOMER_CONTENTION_THREADS)]
+        for fut in concurrent.futures.as_completed(futures):
+            status, lat = fut.result()
+            assert status in (200, 409), f"Unexpected status {status} during same-customer contention"
+            statuses.append(status)
+            latencies.append(lat)
+
+    ok_count = sum(1 for s in statuses if s == 200)
+    conflict_count = sum(1 for s in statuses if s == 409)
+    get_status, _, cart = http_request("GET", f"/api/v1/carts/{customer_id}")
+    assert get_status == 200 and cart is not None, f"Failed to read contended cart: {get_status}"
+    assert len(cart["items"]) == ok_count, f"Item count mismatch: cart has {len(cart['items'])}, expected {ok_count}"
+
+    http_request("DELETE", f"/api/v1/carts/{customer_id}")
+    print(
+        f"      Same-customer contention: {ok_count}/{SAME_CUSTOMER_CONTENTION_THREADS} succeeded (200 OK), "
+        f"{conflict_count} returned 409 Conflict, 0 server errors, persisted items={len(cart['items'])}"
+    )
+    return {"ok": ok_count, "conflict": conflict_count}
+
+
 def benchmark_statistics_aggregation() -> dict:
-    print(f"\n[3/3] Benchmarking MongoDB Aggregation Pipeline (GET /api/v1/statistics/offers) over 100,000+ carts...")
+    print(f"\n[4/4] Benchmarking MongoDB Aggregation Pipeline (GET /api/v1/statistics/offers) over 100,000+ carts...")
     query_path = (
         "/api/v1/statistics/offers"
         "?offerId=tv-philips-55&action=ADD"
@@ -219,5 +273,7 @@ if __name__ == "__main__":
     print("=== SHOPPING CART MICROSERVICE STRESS & LARGE DATASET BENCHMARK ===")
     seed_large_dataset_in_mongodb(TOTAL_SEED_CARTS)
     run_concurrent_http_stress()
+    run_same_customer_race_test()
     benchmark_statistics_aggregation()
+    cleanup_stress_data()
     print("\n=== STRESS TEST COMPLETED SUCCESSFULLY (0 ERRORS) ===")

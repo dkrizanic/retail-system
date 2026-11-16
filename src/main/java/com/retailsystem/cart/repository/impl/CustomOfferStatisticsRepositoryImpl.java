@@ -9,6 +9,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
 import java.util.List;
+import java.util.Objects;
 import org.bson.Document;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.aggregation.Aggregation;
@@ -28,7 +29,13 @@ public class CustomOfferStatisticsRepositoryImpl implements CustomOfferStatistic
     }
 
     @Override
-    public OfferStatisticsResult aggregateOfferStatistics(String offerId, ItemAction action, Instant from, Instant to) {
+    public OfferStatisticsResult aggregateOfferStatistics(
+            String offerId,
+            ItemAction action,
+            Instant from,
+            Instant to,
+            int retargetingLimit
+    ) {
         Date fromDate;
         Date toDate;
         try {
@@ -50,45 +57,38 @@ public class CustomOfferStatisticsRepositoryImpl implements CustomOfferStatistic
                         .and("items.addedAt").gte(fromDate).lte(toDate)
         );
 
-        AggregationOperation groupStage = context -> new Document("$group", new Document("_id", null)
-                .append("soldCount", new Document("$sum", new Document("$cond", List.of(
-                        new Document("$eq", List.of("$status", CartStatus.CHECKED_OUT.name())),
-                        1,
-                        0
-                ))))
-                .append("activeCartCount", new Document("$sum", new Document("$cond", List.of(
-                        new Document("$eq", List.of("$status", CartStatus.ACTIVE.name())),
-                        1,
-                        0
-                ))))
-                .append("evictedCartCount", new Document("$sum", new Document("$cond", List.of(
-                        new Document("$eq", List.of("$status", CartStatus.EVICTED.name())),
-                        1,
-                        0
-                ))))
+        AggregationOperation groupByCustomerStage = context -> new Document("$group", new Document("_id", "$customerId")
+                .append("soldCount", sumWhenStatus(CartStatus.CHECKED_OUT))
+                .append("activeCartCount", sumWhenStatus(CartStatus.ACTIVE))
+                .append("evictedCartCount", sumWhenStatus(CartStatus.EVICTED))
                 .append("totalAddedCount", new Document("$sum", 1))
-                .append("candidateCustomers", new Document("$addToSet", new Document("$cond", List.of(
+                .append("hasCandidate", new Document("$max", new Document("$cond", List.of(
                         new Document("$in", List.of("$status", List.of(CartStatus.ACTIVE.name(), CartStatus.EVICTED.name()))),
-                        "$customerId",
-                        "$$REMOVE"
+                        1,
+                        0
                 ))))
-                .append("purchasedCustomers", new Document("$addToSet", new Document("$cond", List.of(
+                .append("hasPurchased", new Document("$max", new Document("$cond", List.of(
                         new Document("$eq", List.of("$status", CartStatus.CHECKED_OUT.name())),
-                        "$customerId",
-                        "$$REMOVE"
+                        1,
+                        0
                 ))))
         );
 
-        AggregationOperation projectStage = context -> new Document("$project", new Document("_id", 0)
-                .append("soldCount", 1)
-                .append("activeCartCount", 1)
-                .append("evictedCartCount", 1)
-                .append("totalAddedCount", 1)
-                .append("retargetingCustomerIds", new Document("$setDifference", List.of(
-                        "$candidateCustomers",
-                        "$purchasedCustomers"
-                )))
-        );
+        AggregationOperation facetStage = context -> new Document("$facet", new Document("counts", List.of(
+                new Document("$group", new Document("_id", null)
+                        .append("soldCount", new Document("$sum", "$soldCount"))
+                        .append("activeCartCount", new Document("$sum", "$activeCartCount"))
+                        .append("evictedCartCount", new Document("$sum", "$evictedCartCount"))
+                        .append("totalAddedCount", new Document("$sum", "$totalAddedCount"))
+                )
+        )).append("retargeting", List.of(
+                new Document("$match", new Document("hasCandidate", 1)
+                        .append("hasPurchased", 0)
+                        .append("_id", new Document("$ne", null))),
+                new Document("$sort", new Document("_id", 1)),
+                new Document("$limit", retargetingLimit),
+                new Document("$project", new Document("_id", 1))
+        )));
 
         AggregationOptions options = AggregationOptions.builder()
                 .maxTime(Duration.ofSeconds(5))
@@ -99,26 +99,53 @@ public class CustomOfferStatisticsRepositoryImpl implements CustomOfferStatistic
                 matchCartsStage,
                 unwindItemsStage,
                 matchItemsStage,
-                groupStage,
-                projectStage
+                groupByCustomerStage,
+                facetStage
         ).withOptions(options);
 
-        AggregationResults<OfferStatisticsResult> results = mongoTemplate.aggregate(
+        AggregationResults<Document> results = mongoTemplate.aggregate(
                 aggregation,
                 ShoppingCart.class,
-                OfferStatisticsResult.class
+                Document.class
         );
 
-        OfferStatisticsResult mappedResult = results.getUniqueMappedResult();
-        if (mappedResult == null) {
+        Document root = results.getUniqueMappedResult();
+        if (root == null) {
             return new OfferStatisticsResult(0L, 0L, 0L, 0L, List.of());
         }
+
+        List<Document> countsList = root.getList("counts", Document.class);
+        if (countsList == null || countsList.isEmpty()) {
+            return new OfferStatisticsResult(0L, 0L, 0L, 0L, List.of());
+        }
+
+        Document counts = countsList.getFirst();
+        List<Document> retargetingDocs = root.getList("retargeting", Document.class);
+        List<String> retargetingCustomerIds = retargetingDocs == null
+                ? List.of()
+                : retargetingDocs.stream()
+                        .map(doc -> doc.getString("_id"))
+                        .filter(Objects::nonNull)
+                        .toList();
+
         return new OfferStatisticsResult(
-                mappedResult.soldCount(),
-                mappedResult.activeCartCount(),
-                mappedResult.evictedCartCount(),
-                mappedResult.totalAddedCount(),
-                mappedResult.retargetingCustomerIds().stream().sorted().toList()
+                toLong(counts.get("soldCount")),
+                toLong(counts.get("activeCartCount")),
+                toLong(counts.get("evictedCartCount")),
+                toLong(counts.get("totalAddedCount")),
+                retargetingCustomerIds
         );
+    }
+
+    private Document sumWhenStatus(CartStatus status) {
+        return new Document("$sum", new Document("$cond", List.of(
+                new Document("$eq", List.of("$status", status.name())),
+                1,
+                0
+        )));
+    }
+
+    private long toLong(Object value) {
+        return value instanceof Number number ? number.longValue() : 0L;
     }
 }

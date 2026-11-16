@@ -15,11 +15,11 @@ This addendum captures the technical constraints, architectural patterns, and en
 
 ## 2. Architectural Pattern & Coding Rules (`AGENTS.md`)
 
-1. **Pragmatic Layered Architecture with Rich Entities**:
+1. **Pragmatic Layered Architecture with Plain Entities**:
    - `controller`: REST controllers (`CartController`, `StatisticsController`).
    - `dto`: Separated **Write Models (`dto.write`)** and **Read Models (`dto.read`)**.
    - `service` & `service.impl`: Interfaces (`CartService`, `StatisticsService`) in `service` and implementations (`CartServiceImpl`, `StatisticsServiceImpl`) in `service.impl`.
-   - `entity`: Rich entities (`ShoppingCart` `@Document`, `CartItem`, and sealed `Price` value objects `OneTimePrice`, `RecurringPrice`) enforcing business invariants directly without duplicate model/document mapper bloat.
+   - `entity`: Plain data entities (`ShoppingCart` `@Document`, `CartItem`, and `Price` records) with no business logic; rules live in `validation` and lifecycle changes in `service.impl`.
    - `enums`: Dedicated package for domain enums (`ItemAction`, `RecurrenceUnit`, `CartStatus`).
    - `repository` & `repository.impl`:
      - **Simple queries**: Spring Data MongoDB repository interface (`ShoppingCartRepository`) with descriptive derived methods (`findByCustomerIdAndStatus`).

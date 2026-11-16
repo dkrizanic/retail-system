@@ -1,10 +1,9 @@
 package com.retailsystem.cart.service;
 
 import com.retailsystem.cart.dto.read.OfferStatisticsResponse;
-import com.retailsystem.cart.enums.ItemAction;
-import java.time.Instant;
+import com.retailsystem.cart.dto.write.OfferStatisticsQuery;
 
 public interface StatisticsService {
 
-    OfferStatisticsResponse getOfferStatistics(String offerId, ItemAction action, Instant from, Instant to);
+    OfferStatisticsResponse getOfferStatistics(OfferStatisticsQuery query);
 }

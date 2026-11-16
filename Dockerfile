@@ -6,12 +6,19 @@ COPY mvnw pom.xml ./
 RUN chmod +x mvnw && ./mvnw dependency:go-offline -B
 
 COPY src ./src
-RUN ./mvnw clean package -DskipTests -B
+RUN ./mvnw clean package -DskipTests -B && rm -f target/*.jar.original && cp target/*.jar target/app.jar
 
 FROM eclipse-temurin:26-jre
 WORKDIR /app
 
-COPY --from=build /workspace/target/shopping-cart-service-0.0.1-SNAPSHOT.jar app.jar
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system app \
+    && useradd --system --gid app --home-dir /app app
 
+COPY --from=build --chown=app:app /workspace/target/app.jar /app/app.jar
+
+USER app:app
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75.0", "-jar", "/app/app.jar"]

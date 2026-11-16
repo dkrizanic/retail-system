@@ -1,13 +1,12 @@
 package com.retailsystem.cart.controller;
 
 import com.retailsystem.cart.dto.read.OfferStatisticsResponse;
-import com.retailsystem.cart.enums.ItemAction;
+import com.retailsystem.cart.dto.write.OfferStatisticsQuery;
 import com.retailsystem.cart.service.StatisticsService;
-import java.time.Instant;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -21,12 +20,7 @@ public class StatisticsController {
     }
 
     @GetMapping("/offers")
-    public ResponseEntity<OfferStatisticsResponse> getOfferStatistics(
-            @RequestParam String offerId,
-            @RequestParam ItemAction action,
-            @RequestParam Instant from,
-            @RequestParam Instant to
-    ) {
-        return ResponseEntity.ok(statisticsService.getOfferStatistics(offerId, action, from, to));
+    public ResponseEntity<OfferStatisticsResponse> getOfferStatistics(@Valid OfferStatisticsQuery query) {
+        return ResponseEntity.ok(statisticsService.getOfferStatistics(query));
     }
 }

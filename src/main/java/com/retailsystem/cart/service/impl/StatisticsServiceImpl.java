@@ -1,13 +1,12 @@
 package com.retailsystem.cart.service.impl;
 
 import com.retailsystem.cart.dto.read.OfferStatisticsResponse;
-import com.retailsystem.cart.enums.ItemAction;
+import com.retailsystem.cart.dto.write.OfferStatisticsQuery;
 import com.retailsystem.cart.mapper.CartMapper;
 import com.retailsystem.cart.repository.CustomOfferStatisticsRepository.OfferStatisticsResult;
 import com.retailsystem.cart.repository.ShoppingCartRepository;
 import com.retailsystem.cart.service.StatisticsService;
 import com.retailsystem.cart.validation.StatisticsValidator;
-import java.time.Instant;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -28,9 +27,16 @@ public class StatisticsServiceImpl implements StatisticsService {
     }
 
     @Override
-    public OfferStatisticsResponse getOfferStatistics(String offerId, ItemAction action, Instant from, Instant to) {
-        statisticsValidator.validateQuery(offerId, action, from, to);
-        OfferStatisticsResult result = shoppingCartRepository.aggregateOfferStatistics(offerId, action, from, to);
-        return cartMapper.toStatisticsResponse(offerId, action, from, to, result);
+    public OfferStatisticsResponse getOfferStatistics(OfferStatisticsQuery query) {
+        statisticsValidator.validateTimeRange(query.from(), query.to());
+        String normalizedOfferId = query.offerId().trim();
+        OfferStatisticsResult result = shoppingCartRepository.aggregateOfferStatistics(
+                normalizedOfferId,
+                query.action(),
+                query.from(),
+                query.to(),
+                query.retargetingLimit()
+        );
+        return cartMapper.toStatisticsResponse(normalizedOfferId, query.action(), query.from(), query.to(), result);
     }
 }

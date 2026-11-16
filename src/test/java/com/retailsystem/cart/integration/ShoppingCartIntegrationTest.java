@@ -1,5 +1,6 @@
 package com.retailsystem.cart.integration;
 
+import static com.retailsystem.cart.util.CartTestFixtures.emptyCart;
 import static com.retailsystem.cart.util.CartTestFixtures.hybridAddRequest;
 import static com.retailsystem.cart.util.CartTestFixtures.oneTimeAddRequest;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -13,7 +14,13 @@ import com.retailsystem.cart.enums.ItemAction;
 import com.retailsystem.cart.enums.PriceType;
 import com.retailsystem.cart.enums.RecurrenceUnit;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import org.bson.Document;
 import org.bson.types.Decimal128;
 import org.junit.jupiter.api.Test;
@@ -105,12 +112,18 @@ class ShoppingCartIntegrationTest extends BaseIntegrationTest {
         assertThat(postItem(customerId, oneTimeAddRequest("offer-tv-plus", "10.00")).getStatusCode())
                 .isEqualTo(HttpStatus.OK);
         assertThat(shoppingCartRepository.findAll()).hasSize(2);
+
+        String emptyCust = "cust-evict-empty";
+        shoppingCartRepository.save(emptyCart(emptyCust));
+        assertThat(evictCart(emptyCust).getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(shoppingCartRepository.findByCustomerIdAndStatus(emptyCust, CartStatus.EVICTED)).isEmpty();
+        assertThat(shoppingCartRepository.findByCustomerIdAndStatus(emptyCust, CartStatus.ACTIVE)).isEmpty();
     }
 
     @Test
     void shouldRejectCheckoutOfEmptyActiveCartWith409Conflict() {
         String customerId = "cust-empty-checkout";
-        shoppingCartRepository.save(ShoppingCart.createNew(customerId));
+        shoppingCartRepository.save(emptyCart(customerId));
 
         ResponseEntity<ProblemDetail> checkoutResponse = checkoutCart(customerId, ProblemDetail.class);
 
@@ -142,6 +155,95 @@ class ShoppingCartIntegrationTest extends BaseIntegrationTest {
                 """;
         assertThat(postRawItemJson(customerId, nonPositivePriceJson, ProblemDetail.class).getStatusCode())
                 .isEqualTo(HttpStatus.BAD_REQUEST);
+
+        String invalidRecurringFieldsJson = """
+                {
+                  "offerId": "offer-1",
+                  "action": "ADD",
+                  "prices": [{ "type": "RECURRING", "recurrences": 0, "value": 19.99 }]
+                }
+                """;
+        assertThat(postRawItemJson(customerId, invalidRecurringFieldsJson, ProblemDetail.class).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+
+        String oneTimeWithRecurrenceJson = """
+                {
+                  "offerId": "offer-1",
+                  "action": "ADD",
+                  "prices": [{ "type": "ONE_TIME", "value": 19.99, "recurrences": 12, "unit": "MONTHS" }]
+                }
+                """;
+        assertThat(postRawItemJson(customerId, oneTimeWithRecurrenceJson, ProblemDetail.class).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+
+        String outOfRangeExponentJson = """
+                {
+                  "offerId": "offer-1",
+                  "action": "ADD",
+                  "prices": [{ "type": "ONE_TIME", "value": 1e7000 }]
+                }
+                """;
+        assertThat(postRawItemJson(customerId, outOfRangeExponentJson, ProblemDetail.class).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void shouldRecoverFromConcurrentSameCustomerAddAndRemoveOperations() throws Exception {
+        String customerId = "cust-race-1";
+        int concurrentAdds = 8;
+        CountDownLatch ready = new CountDownLatch(concurrentAdds);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<ResponseEntity<ShoppingCartResponse>>> futures = new ArrayList<>();
+
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int i = 0; i < concurrentAdds; i++) {
+                int idx = i;
+                Callable<ResponseEntity<ShoppingCartResponse>> task = () -> {
+                    ready.countDown();
+                    start.await();
+                    return postItem(customerId, oneTimeAddRequest("offer-race-" + idx, "19.99"));
+                };
+                futures.add(executor.submit(task));
+            }
+            ready.await();
+            start.countDown();
+
+            for (Future<ResponseEntity<ShoppingCartResponse>> future : futures) {
+                assertThat(future.get().getStatusCode()).isEqualTo(HttpStatus.OK);
+            }
+        }
+
+        ResponseEntity<ShoppingCartResponse> finalCart = getCart(customerId, ShoppingCartResponse.class);
+        assertThat(finalCart.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(finalCart.getBody()).isNotNull();
+        assertThat(finalCart.getBody().items()).hasSize(concurrentAdds);
+
+        String firstItemId = finalCart.getBody().items().get(0).itemId();
+        String secondItemId = finalCart.getBody().items().get(1).itemId();
+        CountDownLatch mixedStart = new CountDownLatch(1);
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            Future<ResponseEntity<ShoppingCartResponse>> removeFirst = executor.submit(() -> {
+                mixedStart.await();
+                return deleteItem(customerId, firstItemId, ShoppingCartResponse.class);
+            });
+            Future<ResponseEntity<ShoppingCartResponse>> removeSecond = executor.submit(() -> {
+                mixedStart.await();
+                return deleteItem(customerId, secondItemId, ShoppingCartResponse.class);
+            });
+            Future<ResponseEntity<ShoppingCartResponse>> addExtra = executor.submit(() -> {
+                mixedStart.await();
+                return postItem(customerId, oneTimeAddRequest("offer-race-extra", "9.99"));
+            });
+            mixedStart.countDown();
+
+            assertThat(removeFirst.get().getStatusCode()).isEqualTo(HttpStatus.OK);
+            assertThat(removeSecond.get().getStatusCode()).isEqualTo(HttpStatus.OK);
+            assertThat(addExtra.get().getStatusCode()).isEqualTo(HttpStatus.OK);
+        }
+
+        ShoppingCartResponse afterMixed = getCart(customerId, ShoppingCartResponse.class).getBody();
+        assertThat(afterMixed).isNotNull();
+        assertThat(afterMixed.items()).hasSize(concurrentAdds - 1);
     }
 
     @Test
@@ -152,9 +254,9 @@ class ShoppingCartIntegrationTest extends BaseIntegrationTest {
                 .contains("idx_active_customer_cart", "idx_offer_statistics");
 
         String customerId = "cust-unique-active";
-        shoppingCartRepository.save(ShoppingCart.createNew(customerId));
+        shoppingCartRepository.save(emptyCart(customerId));
 
-        assertThatThrownBy(() -> shoppingCartRepository.save(ShoppingCart.createNew(customerId)))
+        assertThatThrownBy(() -> shoppingCartRepository.save(emptyCart(customerId)))
                 .isInstanceOf(DuplicateKeyException.class);
     }
 }

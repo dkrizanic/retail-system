@@ -12,6 +12,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
   shopping-cart-service:
     build:
@@ -31,6 +32,7 @@ services:
       interval: 15s
       timeout: 5s
       retries: 3
+      start_period: 20s
 
 volumes:
   mongodb_data:

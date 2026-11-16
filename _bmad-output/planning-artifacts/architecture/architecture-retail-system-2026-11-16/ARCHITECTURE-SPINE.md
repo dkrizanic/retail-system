@@ -3,7 +3,7 @@ name: 'Shopping Cart Microservice'
 type: architecture-spine
 purpose: build-substrate
 altitude: feature
-paradigm: 'Pragmatic Layered Architecture with Rich Entities'
+paradigm: 'Pragmatic Layered Architecture with Plain Entities'
 scope: 'Shopping Cart Microservice (FR-1 through FR-7, NFR-1 through NFR-4)'
 status: final
 created: '2026-11-16'
@@ -31,11 +31,11 @@ companions: []
 
 ## Design Paradigm
 
-**Pragmatic Layered Architecture with Rich Entities** under base package `com.retailsystem.cart`:
+**Pragmatic Layered Architecture with Plain Entities** under base package `com.retailsystem.cart`:
 - `controller`: Inbound HTTP controllers (`CartController`, `StatisticsController`).
 - `dto.write` & `dto.read`: Separated **Write Models (`dto.write`)** and **Read Models (`dto.read`)**.
 - `service` & `service.impl`: Service interfaces (`CartService`, `StatisticsService`) in `service` and implementations (`CartServiceImpl`, `StatisticsServiceImpl`) in `service.impl`.
-- `entity`: Rich domain entities (`ShoppingCart` `@Document`, `CartItem`, and sealed `Price` value objects `OneTimePrice` and `RecurringPrice`) that encapsulate business invariants without duplicate model/document mapper boilerplate.
+- `entity`: Plain data entities (`ShoppingCart` `@Document`, `CartItem`, and `Price` records) with no business logic, persisted directly without duplicate model/document mapper boilerplate.
 - `enums`: Dedicated package for domain enums (`ItemAction`, `RecurrenceUnit`, `CartStatus`).
 - `repository` & `repository.impl`: Spring Data MongoDB repository (`ShoppingCartRepository`) and custom statistics repository interface (`CustomOfferStatisticsRepository`) in `repository`, with the `MongoTemplate` aggregation implementation (`CustomOfferStatisticsRepositoryImpl`) in `repository.impl`.
 - `exception`: Domain exceptions and `GlobalExceptionHandler` (`ProblemDetail`).
@@ -58,11 +58,11 @@ flowchart TD
 
 ## Invariants & Rules
 
-### AD-1 — Rich Entities Without Duplicate Model/Document Bloat `[ADOPTED]`
+### AD-1 — Plain Entities Without Duplicate Model/Document Bloat `[ADOPTED]`
 
 - **Binds:** `FR-1`, `FR-2`, `FR-3`, `FR-4`, `FR-5`, `FR-6`
 - **Prevents:** Anemic entities that allow invalid state in memory, as well as over-engineered duplicate `DomainModel` + `MongoDocument` + `Mapper` boilerplate.
-- **Rule:** Persist rich entities directly from `com.retailsystem.cart.entity` (`ShoppingCart`, `CartItem`, `Price`, `OneTimePrice`, `RecurringPrice`) and place all enums (`ItemAction`, `RecurrenceUnit`, `CartStatus`) in `com.retailsystem.cart.enums`. Enforce all `BR1` and `BR2` invariants (`offerId` non-blank, `prices.size >= 1`, `Price.value > 0`, `RecurringPrice.recurrences > 0`, non-null enums) inside entity constructors/methods throwing `DomainValidationException`.
+- **Rule:** Persist plain entities directly from `com.retailsystem.cart.entity` (`ShoppingCart`, `CartItem`, `Price`) and place all enums (`ItemAction`, `RecurrenceUnit`, `CartStatus`) in `com.retailsystem.cart.enums`. Entities hold no logic. Enforce all `BR1` and `BR2` rules (`offerId` non-blank, `prices.size >= 1`, `Price.value > 0`, recurring `recurrences > 0`, non-null enums) and cart state rules in `validation.CartValidator`, throwing `DomainValidationException` or `InvalidCartStateException`. Lifecycle changes (add, remove, evict, checkout, timestamps) are done in `service.impl.CartServiceImpl`.
 
 ### AD-2 — Separated Write and Read DTO Models `[ADOPTED]`
 
@@ -96,7 +96,7 @@ flowchart TD
 
 - **Binds:** `all`
 - **Prevents:** Comment clutter in source/test files and brittle/bloated test suites.
-- **Rule:** Source and test `.java` files must contain zero explanatory inline comments, unfinished task markers, or redundant Javadocs. Unit tests in `src/test/java/com/retailsystem/cart/unit` cover entity invariants (`Price`, `CartItem`, `ShoppingCart`) without Spring context startup; integration tests in `src/test/java/com/retailsystem/cart/integration` use Testcontainers (`@ServiceConnection` with MongoDB) to verify end-to-end API and aggregation flows.
+- **Rule:** Source and test `.java` files must contain zero explanatory inline comments, unfinished task markers, or redundant Javadocs. Unit tests in `src/test/java/com/retailsystem/cart/unit` cover validation rules in `CartValidator` and `StatisticsValidator` without Spring context startup; integration tests in `src/test/java/com/retailsystem/cart/integration` use Testcontainers (`@ServiceConnection` with MongoDB) to verify end-to-end API and aggregation flows.
 
 ## Consistency Conventions
 
@@ -155,7 +155,7 @@ retail-system/
 | Capability / Area | Lives in | Governed by |
 | --- | --- | --- |
 | `FR-1`..`FR-5` Cart Lifecycle Operations | `controller.CartController`, `service.impl.CartServiceImpl`, `entity.ShoppingCart`, `repository.ShoppingCartRepository` | `AD-1`, `AD-2`, `AD-3`, `AD-4`, `AD-5` |
-| `FR-6` Item & Polymorphic Price Invariants | `entity.CartItem`, `entity.Price`, `entity.OneTimePrice`, `entity.RecurringPrice`, `enums.*` | `AD-1`, `AD-2`, `AD-6` |
+| `FR-6` Item & Polymorphic Price Invariants | `validation.CartValidator`, `entity.CartItem`, `entity.Price`, `enums.*` | `AD-1`, `AD-2`, `AD-6` |
 | `FR-7` Offer Sales & Retargeting Statistics | `controller.StatisticsController`, `service.impl.StatisticsServiceImpl`, `repository.impl.CustomOfferStatisticsRepositoryImpl` | `AD-2`, `AD-3`, `AD-4`, `AD-5` |
 
 ## Deferred

@@ -14,19 +14,19 @@ updated: 2026-11-16
 
 ## Epic 1: Shopping Cart Lifecycle & Offer Retargeting Statistics
 
-Deliver the complete Shopping Cart microservice (`FR-1` through `FR-7`, `NFR-1` through `NFR-4`) following Pragmatic Layered Architecture with Rich Entities (`AD-1` through `AD-6`).
+Deliver the complete Shopping Cart microservice (`FR-1` through `FR-7`, `NFR-1` through `NFR-4`) following Pragmatic Layered Architecture with Plain Entities (`AD-1` through `AD-6`).
 
-### Story 1.1: Project Foundation and Rich Domain Entities
+### Story 1.1: Project Foundation and Plain Domain Entities
 
 **As a** platform engineer,
-**I want** rich domain entities (`ShoppingCart`, `CartItem`, `Price`, `OneTimePrice`, `RecurringPrice`) in `entity` and isolated enums (`ItemAction`, `RecurrenceUnit`, `CartStatus`) in `enums` within a Spring Boot `4.1.2` / Java `26` Maven project,
+**I want** plain domain entities (`ShoppingCart`, `CartItem`, `Price`) in `entity` and isolated enums (`ItemAction`, `RecurrenceUnit`, `CartStatus`) in `enums` within a Spring Boot `4.1.2` / Java `26` Maven project,
 **So that** all business rules (`BR1`, `BR2`, `FR-6`) and cart lifecycle transitions are enforced directly on the entities without duplicate model/document mapper bloat (`AD-1`, `AD-3`, `AD-6`).
 
 **Acceptance Criteria:**
-- **AC-1.1.1 (BR1 Minimum Price Invariant):** Given a `CartItem` creation request, when the `prices` list is null or empty, then `DomainValidationException` is thrown.
-- **AC-1.1.2 (BR2 Mandatory Item & Price Invariants):** Given `OneTimePrice` or `RecurringPrice` construction, when `value <= 0`, `recurrences <= 0`, `unit` is null, or `offerId`/`customerId` is blank, then `DomainValidationException` is thrown.
-- **AC-1.1.3 (Cart Lifecycle State Transitions):** Given an `ACTIVE` `ShoppingCart`, when `addItem`, `removeItem`, `evict`, or `checkout` is invoked, then the cart enforces state rules (rejecting mutations on non-`ACTIVE` carts and rejecting `checkout` on an empty cart with `InvalidCartStateException`).
-- **AC-1.1.4 (Unit Test Verification):** Pure JUnit 5 unit tests in `src/test/java/com/retailsystem/cart/unit` verify all entity invariants and state transitions with zero Spring context startup and zero inline AI comments.
+- **AC-1.1.1 (BR1 Minimum Price Invariant):** Given an add-item request, when the `prices` list is null or empty, then `CartValidator` throws `DomainValidationException`.
+- **AC-1.1.2 (BR2 Mandatory Item & Price Invariants):** Given a one-time or recurring price validated by `CartValidator`, when `value <= 0`, `recurrences <= 0`, `unit` is null, or `offerId`/`customerId` is blank, then `DomainValidationException` is thrown.
+- **AC-1.1.3 (Cart Lifecycle State Transitions):** Given an `ACTIVE` `ShoppingCart`, when `addItem`, `removeItem`, `evict`, or `checkout` is invoked, then `CartValidator` and `CartServiceImpl` enforce state rules (rejecting mutations on non-`ACTIVE` carts and rejecting `checkout` on an empty cart with `InvalidCartStateException`).
+- **AC-1.1.4 (Unit Test Verification):** Pure JUnit 5 unit tests in `src/test/java/com/retailsystem/cart/unit` verify all validator rules with zero Spring context startup and zero inline AI comments.
 
 ### Story 1.2: MongoDB Persistence and Cart Lifecycle REST API
 
