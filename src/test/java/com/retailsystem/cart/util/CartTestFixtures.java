@@ -1,13 +1,13 @@
 package com.retailsystem.cart.util;
 
 import com.retailsystem.cart.dto.write.AddCartItemRequest;
-import com.retailsystem.cart.dto.write.OneTimePriceWriteDto;
-import com.retailsystem.cart.dto.write.RecurringPriceWriteDto;
+import com.retailsystem.cart.dto.write.PriceWriteDto;
 import com.retailsystem.cart.entity.CartItem;
 import com.retailsystem.cart.entity.Price;
 import com.retailsystem.cart.entity.ShoppingCart;
 import com.retailsystem.cart.enums.CartStatus;
 import com.retailsystem.cart.enums.ItemAction;
+import com.retailsystem.cart.enums.PriceType;
 import com.retailsystem.cart.enums.RecurrenceUnit;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -23,7 +23,7 @@ public final class CartTestFixtures {
         return new AddCartItemRequest(
                 offerId,
                 ItemAction.ADD,
-                List.of(new OneTimePriceWriteDto(new BigDecimal(amount)))
+                List.of(new PriceWriteDto(PriceType.ONE_TIME, new BigDecimal(amount), null, null))
         );
     }
 
@@ -39,8 +39,8 @@ public final class CartTestFixtures {
                 offerId,
                 action,
                 List.of(
-                        new OneTimePriceWriteDto(new BigDecimal(oneTimeAmount)),
-                        new RecurringPriceWriteDto(recurrences, unit, new BigDecimal(recurringAmount))
+                        new PriceWriteDto(PriceType.ONE_TIME, new BigDecimal(oneTimeAmount), null, null),
+                        new PriceWriteDto(PriceType.RECURRING, new BigDecimal(recurringAmount), recurrences, unit)
                 )
         );
     }

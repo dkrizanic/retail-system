@@ -1,19 +1,15 @@
 package com.retailsystem.cart.dto.read;
 
-import com.fasterxml.jackson.annotation.JsonSubTypes;
-import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.retailsystem.cart.enums.PriceType;
+import com.retailsystem.cart.enums.RecurrenceUnit;
 import java.math.BigDecimal;
 
-@JsonTypeInfo(
-        use = JsonTypeInfo.Id.NAME,
-        include = JsonTypeInfo.As.PROPERTY,
-        property = "type"
-)
-@JsonSubTypes({
-        @JsonSubTypes.Type(value = OneTimePriceReadDto.class, name = "ONE_TIME"),
-        @JsonSubTypes.Type(value = RecurringPriceReadDto.class, name = "RECURRING")
-})
-public sealed interface PriceReadDto permits OneTimePriceReadDto, RecurringPriceReadDto {
-
-    BigDecimal value();
+@JsonInclude(JsonInclude.Include.NON_NULL)
+public record PriceReadDto(
+        PriceType type,
+        BigDecimal value,
+        Integer recurrences,
+        RecurrenceUnit unit
+) {
 }

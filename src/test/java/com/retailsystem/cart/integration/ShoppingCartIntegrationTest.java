@@ -5,12 +5,12 @@ import static com.retailsystem.cart.util.CartTestFixtures.oneTimeAddRequest;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.retailsystem.cart.dto.read.OneTimePriceReadDto;
-import com.retailsystem.cart.dto.read.RecurringPriceReadDto;
+import com.retailsystem.cart.dto.read.PriceReadDto;
 import com.retailsystem.cart.dto.read.ShoppingCartResponse;
 import com.retailsystem.cart.entity.ShoppingCart;
 import com.retailsystem.cart.enums.CartStatus;
 import com.retailsystem.cart.enums.ItemAction;
+import com.retailsystem.cart.enums.PriceType;
 import com.retailsystem.cart.enums.RecurrenceUnit;
 import java.math.BigDecimal;
 import java.util.List;
@@ -43,8 +43,8 @@ class ShoppingCartIntegrationTest extends BaseIntegrationTest {
         assertThat(cartAfterFirstAdd.status()).isEqualTo(CartStatus.ACTIVE);
         assertThat(cartAfterFirstAdd.items()).hasSize(1);
         assertThat(cartAfterFirstAdd.items().getFirst().prices()).containsExactly(
-                new OneTimePriceReadDto(new BigDecimal("49.99")),
-                new RecurringPriceReadDto(12, RecurrenceUnit.MONTHS, new BigDecimal("29.99"))
+                new PriceReadDto(PriceType.ONE_TIME, new BigDecimal("49.99"), null, null),
+                new PriceReadDto(PriceType.RECURRING, new BigDecimal("29.99"), 12, RecurrenceUnit.MONTHS)
         );
 
         Document rawCartDoc = mongoTemplate.getCollection("shopping_carts")
