@@ -2,8 +2,10 @@ package com.retailsystem.cart.exception;
 
 import jakarta.validation.ConstraintViolationException;
 import java.util.stream.Collectors;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.dao.QueryTimeoutException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -39,6 +41,16 @@ public class GlobalExceptionHandler {
                 "Concurrent modification conflict on shopping cart"
         );
         problemDetail.setTitle("Cart State Conflict");
+        return problemDetail;
+    }
+
+    @ExceptionHandler({DataAccessResourceFailureException.class, QueryTimeoutException.class})
+    public ProblemDetail handleDatabaseUnavailable(RuntimeException ex) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "Shopping cart storage is temporarily unavailable; please retry shortly"
+        );
+        problemDetail.setTitle("Service Temporarily Unavailable");
         return problemDetail;
     }
 

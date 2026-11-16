@@ -1,8 +1,21 @@
 spring:
   application:
     name: shopping-cart-service
+  threads:
+    virtual:
+      enabled: true
   mongodb:
-    uri: ${MONGODB_URI:mongodb://localhost:27017/shopping_cart_db}
+    uri: ${MONGODB_URI:mongodb://localhost:27017/shopping_cart_db?connectTimeoutMS=3000&socketTimeoutMS=5000&serverSelectionTimeoutMS=3000}
   mvc:
     problemdetails:
       enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true

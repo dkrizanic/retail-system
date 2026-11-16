@@ -12,10 +12,14 @@ import com.retailsystem.cart.repository.ShoppingCartRepository;
 import com.retailsystem.cart.service.CartService;
 import com.retailsystem.cart.validation.CartValidator;
 import java.util.List;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 
 @Service
 public class CartServiceImpl implements CartService {
+
+    private static final int MAX_CONCURRENCY_RETRIES = 3;
 
     private final ShoppingCartRepository shoppingCartRepository;
     private final CartValidator cartValidator;
@@ -46,11 +50,21 @@ public class CartServiceImpl implements CartService {
                 request != null ? request.action() : null,
                 prices
         );
-        ShoppingCart cart = shoppingCartRepository
-                .findByCustomerIdAndStatus(customerId, CartStatus.ACTIVE)
-                .orElseGet(() -> ShoppingCart.createNew(customerId));
-        cart.addItem(CartItem.create(request.offerId(), request.action(), prices));
-        return cartMapper.toResponse(shoppingCartRepository.save(cart));
+        CartItem newItem = CartItem.create(request.offerId(), request.action(), prices);
+
+        for (int attempt = 1; ; attempt++) {
+            try {
+                ShoppingCart cart = shoppingCartRepository
+                        .findByCustomerIdAndStatus(customerId, CartStatus.ACTIVE)
+                        .orElseGet(() -> ShoppingCart.createNew(customerId));
+                cart.addItem(newItem);
+                return cartMapper.toResponse(shoppingCartRepository.save(cart));
+            } catch (DuplicateKeyException | OptimisticLockingFailureException ex) {
+                if (attempt >= MAX_CONCURRENCY_RETRIES) {
+                    throw ex;
+                }
+            }
+        }
     }
 
     @Override
