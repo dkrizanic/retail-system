@@ -2,7 +2,8 @@
 title: 'Story 1.1: Project Foundation and Rich Domain Entities'
 type: 'feature'
 created: '2026-11-16'
-status: 'ready-for-dev'
+status: 'done'
+baseline_commit: '7a14ebe131e1f1831b00fa5ddde93ec10d6af679'
 route: 'dispatch'
 review_loop_iteration: 0
 context:
@@ -72,12 +73,12 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `pom.xml`, `mvnw`, `mvnw.cmd`, `.mvn/wrapper/maven-wrapper.properties`, `src/main/java/com/retailsystem/cart/ShoppingCartApplication.java` -- Initialize Spring Boot `4.1.2` / Java `26` Maven project with Maven Wrapper -- Provides verified build and dependency management across stories.
-- [ ] `src/main/java/com/retailsystem/cart/exception/DomainValidationException.java`, `src/main/java/com/retailsystem/cart/exception/ResourceNotFoundException.java`, `src/main/java/com/retailsystem/cart/exception/InvalidCartStateException.java` -- Create domain runtime exceptions -- Enables expressive domain error signaling mapped to HTTP `ProblemDetail` in Story 1.2.
-- [ ] `src/main/java/com/retailsystem/cart/enums/ItemAction.java`, `src/main/java/com/retailsystem/cart/enums/RecurrenceUnit.java`, `src/main/java/com/retailsystem/cart/enums/CartStatus.java`, `src/main/java/com/retailsystem/cart/entity/Price.java`, `src/main/java/com/retailsystem/cart/entity/OneTimePrice.java`, `src/main/java/com/retailsystem/cart/entity/RecurringPrice.java` -- Implement isolated enums and sealed polymorphic `Price` value objects -- Enforces `BR2` price invariants at construction time.
-- [ ] `src/main/java/com/retailsystem/cart/entity/CartItem.java`, `src/main/java/com/retailsystem/cart/entity/ShoppingCart.java` -- Implement `CartItem` and `ShoppingCart` rich entities -- Enforces `BR1`, `BR2`, and cart lifecycle transitions (`addItem`, `removeItem`, `evict`, `checkout`).
-- [ ] `src/main/java/com/retailsystem/cart/repository/CustomOfferStatisticsRepository.java`, `src/main/java/com/retailsystem/cart/repository/ShoppingCartRepository.java` -- Define repository interfaces -- Establishes clean interface boundaries (`AD-3`, `AD-4`).
-- [ ] `src/test/java/com/retailsystem/cart/unit/PriceAndCartItemValidationTest.java`, `src/test/java/com/retailsystem/cart/unit/ShoppingCartTest.java` -- Write pure JUnit 5 unit tests covering all I/O & Edge-Case Matrix scenarios -- Verifies `AC-1.1.1` through `AC-1.1.4` without Spring context startup.
+- [x] `pom.xml`, `mvnw`, `mvnw.cmd`, `.mvn/wrapper/maven-wrapper.properties`, `src/main/java/com/retailsystem/cart/ShoppingCartApplication.java` -- Initialize Spring Boot `4.1.2` / Java `26` Maven project with Maven Wrapper -- Provides verified build and dependency management across stories.
+- [x] `src/main/java/com/retailsystem/cart/exception/DomainValidationException.java`, `src/main/java/com/retailsystem/cart/exception/ResourceNotFoundException.java`, `src/main/java/com/retailsystem/cart/exception/InvalidCartStateException.java` -- Create domain runtime exceptions -- Enables expressive domain error signaling mapped to HTTP `ProblemDetail` in Story 1.2.
+- [x] `src/main/java/com/retailsystem/cart/enums/ItemAction.java`, `src/main/java/com/retailsystem/cart/enums/RecurrenceUnit.java`, `src/main/java/com/retailsystem/cart/enums/CartStatus.java`, `src/main/java/com/retailsystem/cart/entity/Price.java`, `src/main/java/com/retailsystem/cart/entity/OneTimePrice.java`, `src/main/java/com/retailsystem/cart/entity/RecurringPrice.java` -- Implement isolated enums and sealed polymorphic `Price` value objects -- Enforces `BR2` price invariants at construction time.
+- [x] `src/main/java/com/retailsystem/cart/entity/CartItem.java`, `src/main/java/com/retailsystem/cart/entity/ShoppingCart.java` -- Implement `CartItem` and `ShoppingCart` rich entities -- Enforces `BR1`, `BR2`, and cart lifecycle transitions (`addItem`, `removeItem`, `evict`, `checkout`).
+- [x] `src/main/java/com/retailsystem/cart/repository/CustomOfferStatisticsRepository.java`, `src/main/java/com/retailsystem/cart/repository/ShoppingCartRepository.java` -- Define repository interfaces -- Establishes clean interface boundaries (`AD-3`, `AD-4`).
+- [x] `src/test/java/com/retailsystem/cart/unit/PriceAndCartItemValidationTest.java`, `src/test/java/com/retailsystem/cart/unit/ShoppingCartTest.java` -- Write pure JUnit 5 unit tests covering all I/O & Edge-Case Matrix scenarios -- Verifies `AC-1.1.1` through `AC-1.1.4` without Spring context startup.
 
 **Acceptance Criteria:**
 - Given a `CartItem` creation request, when `prices` is null or empty, then `DomainValidationException` is thrown (`AC-1.1.1`).
@@ -87,9 +88,24 @@ context:
 
 ## Implementation Notes
 
+- Initialized Maven project (`pom.xml`) with `spring-boot-starter-parent:4.1.2`, `java.version: 26`, and Maven Wrapper (`mvnw` / `mvnw.cmd`).
+- Implemented isolated domain enums (`ItemAction`, `RecurrenceUnit`, `CartStatus`) in `com.retailsystem.cart.enums` and sealed polymorphic `Price` value objects (`OneTimePrice`, `RecurringPrice` with `@TypeAlias`) in `com.retailsystem.cart.entity`.
+- Implemented `CartItem` and `ShoppingCart` rich entities enforcing `BR1`, `BR2`, and lifecycle state transitions (`ACTIVE` -> `CHECKED_OUT` / `EVICTED`).
+- Defined `ShoppingCartRepository` and `CustomOfferStatisticsRepository` interfaces in `com.retailsystem.cart.repository`.
+- Verified all 11 JUnit 5 unit tests in `PriceAndCartItemValidationTest` and `ShoppingCartTest` pass via `.\mvnw.cmd test` with zero Spring context startup and zero comments in `.java` files.
+
 ## Spec Change Log
 
 ## Review Triage Log
+
+- [edge-case-hunter / blind-hunter] `ShoppingCart.java` `@PersistenceCreator` null elements in `items` — verdict: `medium` (route: `patch`). Added null-element validation (`DomainValidationException`) in `@PersistenceCreator`.
+- [edge-case-hunter / blind-hunter] `ShoppingCart.java` `@PersistenceCreator` `CHECKED_OUT` with empty `items` — verdict: `medium` (route: `patch`). Enforced non-empty `items` check (`InvalidCartStateException`) when `status == CartStatus.CHECKED_OUT`.
+- [edge-case-hunter / blind-hunter] `ShoppingCart.java` `addItem(CartItem)` duplicate `itemId` risk and duplicate `getCartId()` getter — verdict: `low` (route: `patch`). Removed unused `addItem(CartItem)` overload and duplicate `getCartId()` method.
+- [blind-hunter] `CustomOfferStatisticsRepository.java` `OfferStatisticsResult` defensive copy — verdict: `low` (route: `patch`). Added compact constructor defensively copying `retargetingCustomerIds`.
+- [blind-hunter] `ShoppingCart.removeItem` blank check — verdict: `low` (rejected). Guard returns the expected `ResourceNotFoundException` without complexity.
+- [blind-hunter] `mvnw` missing from diff — verdict: `false`. Wrapper files exist on disk and were only excluded from the diff path filter.
+- [blind-hunter] Missing micro-tests for `@PersistenceCreator` — verdict: `false`. Excluded by `AGENTS.md` Rule 3 ("No Test Bloat").
+- [blind-hunter] Story status `in-progress` in diff — verdict: `false`. Expected status during Step 3 before Step 5 marks `done`.
 
 ## Verification
 
