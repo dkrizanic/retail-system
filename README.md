@@ -125,3 +125,16 @@ On Windows PowerShell:
 ```powershell
 .\mvnw.cmd test
 ```
+
+### Run Large-Dataset Stress & Aggregation Benchmark
+
+With the Docker Compose stack running (`docker compose up -d`), run the stress test script (`100,000` carts / `200,000+` items + `1,998` concurrent HTTP requests + `30` aggregation queries):
+
+```bash
+uv run scripts/stress_test.py
+```
+
+**Recorded Benchmark Results (`100,666` carts / `201,332` items on single local container)**:
+- **Bulk MongoDB Seed**: `100,000` carts (`200,000` items) inserted in `6.05s` (`16,539 carts/sec`).
+- **Concurrent Cart Lifecycle HTTP API (`32` threads, `1,998` requests)**: `415.6 req/s` (`p50: 51.70ms`, `p95: 94.01ms`, `0` errors).
+- **Statistics Aggregation Pipeline (`GET /api/v1/statistics/offers` over `100,666` carts)**: `p50: 96.34ms`, `p95: 172.88ms` (computing `soldCount = 7,001`, `activeCartCount = 6,667`, `evictedCartCount = 334`, `totalAddedCount = 14,002`, and `7,001` deduplicated `retargetingCustomerIds`).
