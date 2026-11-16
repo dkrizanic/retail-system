@@ -1,6 +1,5 @@
 package com.retailsystem.cart.dto.write;
 
-import com.retailsystem.cart.entity.Price;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
@@ -10,9 +9,4 @@ public record OneTimePriceWriteDto(
         @DecimalMin(value = "0.0", inclusive = false, message = "One-time price value must be greater than zero")
         BigDecimal value
 ) implements PriceWriteDto {
-
-    @Override
-    public Price toEntity() {
-        return Price.oneTime(value);
-    }
 }

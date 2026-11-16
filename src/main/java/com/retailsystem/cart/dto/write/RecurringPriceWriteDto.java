@@ -1,6 +1,5 @@
 package com.retailsystem.cart.dto.write;
 
-import com.retailsystem.cart.entity.Price;
 import com.retailsystem.cart.enums.RecurrenceUnit;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
@@ -16,9 +15,4 @@ public record RecurringPriceWriteDto(
         @DecimalMin(value = "0.0", inclusive = false, message = "Recurring price value must be greater than zero")
         BigDecimal value
 ) implements PriceWriteDto {
-
-    @Override
-    public Price toEntity() {
-        return Price.recurring(recurrences, unit, value);
-    }
 }

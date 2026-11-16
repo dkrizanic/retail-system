@@ -1,6 +1,5 @@
 package com.retailsystem.cart.validation;
 
-import com.retailsystem.cart.dto.write.AddCartItemRequest;
 import com.retailsystem.cart.entity.Price;
 import com.retailsystem.cart.entity.ShoppingCart;
 import com.retailsystem.cart.enums.CartStatus;
@@ -23,15 +22,9 @@ public class CartValidator {
         }
     }
 
-    public void validateAddItem(String customerId, AddCartItemRequest request) {
+    public void validateAddItem(String customerId, String offerId, ItemAction action, List<Price> prices) {
         validateCustomerId(customerId);
-        if (request == null) {
-            throw new DomainValidationException("Add item request is required");
-        }
-        validateItemAttributes(request.offerId(), request.action(),
-                request.prices() == null ? null : request.prices().stream()
-                        .map(p -> p == null ? null : p.toEntity())
-                        .toList());
+        validateItemAttributes(offerId, action, prices);
     }
 
     public void validateItemAttributes(String offerId, ItemAction action, List<Price> prices) {

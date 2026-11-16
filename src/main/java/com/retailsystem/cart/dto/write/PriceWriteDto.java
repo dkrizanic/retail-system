@@ -2,7 +2,6 @@ package com.retailsystem.cart.dto.write;
 
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import com.retailsystem.cart.entity.Price;
 import java.math.BigDecimal;
 
 @JsonTypeInfo(
@@ -17,6 +16,4 @@ import java.math.BigDecimal;
 public sealed interface PriceWriteDto permits OneTimePriceWriteDto, RecurringPriceWriteDto {
 
     BigDecimal value();
-
-    Price toEntity();
 }

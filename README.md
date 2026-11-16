@@ -13,11 +13,12 @@ com.retailsystem.cart
 ├── config          # MongoDB custom Decimal128 converters and index initialization
 ├── controller      # REST controllers (CartController, StatisticsController)
 ├── dto
-│   ├── write       # Immutable Java record request payloads with Bean Validation
-│   └── read        # Immutable Java record response payloads
+│   ├── write       # Pure Java record request payloads with Bean Validation
+│   └── read        # Pure Java record response payloads
 ├── entity          # Clean domain entities (ShoppingCart, CartItem, Price)
 ├── enums           # Domain enums (CartStatus, ItemAction, PriceType, RecurrenceUnit)
 ├── exception       # Domain exceptions mapped to RFC 9457 ProblemDetail responses
+├── mapper          # MapStruct compile-time DTO <-> Entity mapper (CartMapper)
 ├── repository      # Spring Data MongoDB repositories (ShoppingCartRepository, CustomOfferStatisticsRepository)
 │   └── impl        # Custom MongoTemplate aggregation pipeline (CustomOfferStatisticsRepositoryImpl)
 ├── service         # Service interfaces (CartService, StatisticsService)
@@ -27,7 +28,7 @@ com.retailsystem.cart
 
 ### Key Engineering Highlights
 
-- **Dedicated Validation Layer & Clean Entities**: `ShoppingCart`, `CartItem`, and `Price` stay lean and persistence-friendly in `entity`, while `CartValidator` and `StatisticsValidator` in `validation` enforce all domain rules (`BR1`, `BR2`, cart state transitions, and time-window invariants) without cluttering services or entity constructors.
+- **Dedicated Validation & MapStruct Mapping Layers**: `ShoppingCart`, `CartItem`, and `Price` stay lean in `entity`, all `dto.write` and `dto.read` records are pure data structures with zero mapping logic, `CartMapper` (`@Mapper` via MapStruct) generates compile-time mappings, and `CartValidator` / `StatisticsValidator` in `validation` enforce all domain rules (`BR1`, `BR2`, cart state transitions, and time-window invariants).
 - **Separated Write and Read Models**: Inbound commands (`dto.write`) and outbound queries (`dto.read`) use distinct Java `record` types. Polymorphic prices use `@JsonTypeInfo` (`ONE_TIME` vs `RECURRING`) on the REST boundary and `@TypeAlias` in MongoDB.
 - **Exact Monetary Precision**: All price amounts use `BigDecimal` in Java and are stored as BSON `Decimal128` in MongoDB via custom converters.
 - **Single Active Cart Guarantee & Optimistic Concurrency**:

@@ -2,8 +2,6 @@ package com.retailsystem.cart.dto.read;
 
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import com.retailsystem.cart.entity.Price;
-import com.retailsystem.cart.enums.PriceType;
 import java.math.BigDecimal;
 
 @JsonTypeInfo(
@@ -18,11 +16,4 @@ import java.math.BigDecimal;
 public sealed interface PriceReadDto permits OneTimePriceReadDto, RecurringPriceReadDto {
 
     BigDecimal value();
-
-    static PriceReadDto from(Price price) {
-        if (price.type() == PriceType.RECURRING) {
-            return new RecurringPriceReadDto(price.recurrences(), price.unit(), price.value());
-        }
-        return new OneTimePriceReadDto(price.value());
-    }
 }
