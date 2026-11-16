@@ -5,7 +5,7 @@ import com.retailsystem.cart.enums.CartStatus;
 import java.util.Optional;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
-public interface ShoppingCartRepository extends MongoRepository<ShoppingCart, String> {
+public interface ShoppingCartRepository extends MongoRepository<ShoppingCart, String>, CustomOfferStatisticsRepository {
 
     Optional<ShoppingCart> findByCustomerIdAndStatus(String customerId, CartStatus status);
 }
