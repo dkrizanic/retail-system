@@ -4,6 +4,7 @@ import com.retailsystem.cart.dto.read.ShoppingCartResponse;
 import com.retailsystem.cart.dto.write.AddCartItemRequest;
 import com.retailsystem.cart.service.CartService;
 import jakarta.validation.Valid;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/v1/carts/{customerId}")
 public class CartController {
@@ -25,6 +27,7 @@ public class CartController {
 
     @GetMapping
     public ResponseEntity<ShoppingCartResponse> getActiveCart(@PathVariable String customerId) {
+        log.debug("Getting active cart for customer: {}", customerId);
         return ResponseEntity.ok(cartService.getActiveCart(customerId));
     }
 
@@ -33,6 +36,7 @@ public class CartController {
             @PathVariable String customerId,
             @Valid @RequestBody AddCartItemRequest request
     ) {
+        log.info("Adding item {} to cart of customer: {}", request.offerId(), customerId);
         return ResponseEntity.ok(cartService.addItem(customerId, request));
     }
 
@@ -41,17 +45,20 @@ public class CartController {
             @PathVariable String customerId,
             @PathVariable String itemId
     ) {
+        log.info("Removing item {} from cart of customer: {}", itemId, customerId);
         return ResponseEntity.ok(cartService.removeItem(customerId, itemId));
     }
 
     @DeleteMapping
     public ResponseEntity<Void> evictCart(@PathVariable String customerId) {
+        log.info("Evicting cart of customer: {}", customerId);
         cartService.evictCart(customerId);
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/checkout")
     public ResponseEntity<ShoppingCartResponse> checkoutCart(@PathVariable String customerId) {
+        log.info("Checking out cart of customer: {}", customerId);
         return ResponseEntity.ok(cartService.checkoutCart(customerId));
     }
 }

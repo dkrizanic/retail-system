@@ -5,6 +5,7 @@ import com.mongodb.MongoSocketException;
 import com.mongodb.MongoTimeoutException;
 import jakarta.validation.ConstraintViolationException;
 import java.util.Objects;
+import lombok.extern.slf4j.Slf4j;
 import java.util.stream.Collectors;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DuplicateKeyException;
@@ -22,11 +23,13 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(ResourceNotFoundException.class)
     public ProblemDetail handleResourceNotFound(ResourceNotFoundException ex) {
+        log.warn("Resource not found: {}", ex.getMessage());
         ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
         problemDetail.setTitle("Resource Not Found");
         return problemDetail;
@@ -34,6 +37,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(InvalidCartStateException.class)
     public ProblemDetail handleInvalidCartState(InvalidCartStateException ex) {
+        log.warn("Invalid cart state: {}", ex.getMessage());
         ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
         problemDetail.setTitle("Cart State Conflict");
         return problemDetail;
@@ -41,6 +45,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({DuplicateKeyException.class, OptimisticLockingFailureException.class})
     public ProblemDetail handleConcurrencyConflict(RuntimeException ex) {
+        log.warn("Concurrent modification conflict: {}", ex.getClass().getSimpleName());
         ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
                 HttpStatus.CONFLICT,
                 "Concurrent modification conflict on shopping cart"
@@ -51,12 +56,14 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({DataAccessResourceFailureException.class, QueryTimeoutException.class})
     public ProblemDetail handleDatabaseUnavailable(RuntimeException ex) {
+        log.error("Database unavailable", ex);
         return serviceUnavailableProblemDetail();
     }
 
     @ExceptionHandler(UncategorizedMongoDbException.class)
     public ProblemDetail handleUncategorizedMongo(UncategorizedMongoDbException ex) {
         Throwable cause = ex.getCause();
+        log.error("Uncategorized MongoDB failure", ex);
         if (cause instanceof MongoExecutionTimeoutException
                 || cause instanceof MongoTimeoutException
                 || cause instanceof MongoSocketException) {
@@ -67,6 +74,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DomainValidationException.class)
     public ProblemDetail handleDomainValidation(DomainValidationException ex) {
+        log.warn("Validation failed: {}", ex.getMessage());
         ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
         problemDetail.setTitle("Validation Error");
         return problemDetail;
@@ -125,6 +133,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleUnexpectedError(Exception ex) {
+        log.error("Unexpected error", ex);
         return internalErrorProblemDetail();
     }
 
