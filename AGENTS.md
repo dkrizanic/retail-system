@@ -12,7 +12,7 @@ This repository follows the **BMAD (Breakthrough Method for Agile AI-Driven Deve
 
 ---
 
-## 2. Architecture & Code Quality Standards (Senior Level)
+## 2. Architecture & Code Quality Standards
 
 - **Stack**: Java 26 (25 LTS compatible), Spring Boot 4.1.x, Maven, and MongoDB (8.0 LTS / 9.0).
 - **Architecture Pattern**: **Pragmatic Layered Architecture with Rich Entities**:

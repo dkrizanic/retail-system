@@ -1,6 +1,5 @@
 package com.retailsystem.cart.dto.write;
 
-import com.retailsystem.cart.entity.OneTimePrice;
 import com.retailsystem.cart.entity.Price;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
@@ -14,6 +13,6 @@ public record OneTimePriceWriteDto(
 
     @Override
     public Price toEntity() {
-        return new OneTimePrice(value);
+        return Price.oneTime(value);
     }
 }

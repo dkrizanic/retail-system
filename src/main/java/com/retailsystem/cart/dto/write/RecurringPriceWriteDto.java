@@ -1,7 +1,6 @@
 package com.retailsystem.cart.dto.write;
 
 import com.retailsystem.cart.entity.Price;
-import com.retailsystem.cart.entity.RecurringPrice;
 import com.retailsystem.cart.enums.RecurrenceUnit;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
@@ -20,6 +19,6 @@ public record RecurringPriceWriteDto(
 
     @Override
     public Price toEntity() {
-        return new RecurringPrice(recurrences, unit, value);
+        return Price.recurring(recurrences, unit, value);
     }
 }

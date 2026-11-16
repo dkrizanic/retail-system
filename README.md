@@ -15,18 +15,19 @@ com.retailsystem.cart
 ├── dto
 │   ├── write       # Immutable Java record request payloads with Bean Validation
 │   └── read        # Immutable Java record response payloads
-├── entity          # Rich domain entities enforcing invariants (ShoppingCart, CartItem, Price, OneTimePrice, RecurringPrice)
-├── enums           # Domain enums (CartStatus, ItemAction, RecurrenceUnit)
+├── entity          # Clean domain entities (ShoppingCart, CartItem, Price)
+├── enums           # Domain enums (CartStatus, ItemAction, PriceType, RecurrenceUnit)
 ├── exception       # Domain exceptions mapped to RFC 9457 ProblemDetail responses
 ├── repository      # Spring Data MongoDB repositories (ShoppingCartRepository, CustomOfferStatisticsRepository)
 │   └── impl        # Custom MongoTemplate aggregation pipeline (CustomOfferStatisticsRepositoryImpl)
-└── service         # Service interfaces (CartService, StatisticsService)
-    └── impl        # Stateless service implementations (CartServiceImpl, StatisticsServiceImpl)
+├── service         # Service interfaces (CartService, StatisticsService)
+│   └── impl        # Stateless service implementations (CartServiceImpl, StatisticsServiceImpl)
+└── validation      # Dedicated validators (CartValidator, StatisticsValidator)
 ```
 
 ### Key Engineering Highlights
 
-- **Rich Domain Entities without Mapper Bloat**: `ShoppingCart`, `CartItem`, and the sealed `Price` hierarchy (`OneTimePrice`, `RecurringPrice`) validate all domain invariants in their constructors and domain methods (`addItem`, `removeItem`, `evict`, `checkout`) while persisting directly to MongoDB.
+- **Dedicated Validation Layer & Clean Entities**: `ShoppingCart`, `CartItem`, and `Price` stay lean and persistence-friendly in `entity`, while `CartValidator` and `StatisticsValidator` in `validation` enforce all domain rules (`BR1`, `BR2`, cart state transitions, and time-window invariants) without cluttering services or entity constructors.
 - **Separated Write and Read Models**: Inbound commands (`dto.write`) and outbound queries (`dto.read`) use distinct Java `record` types. Polymorphic prices use `@JsonTypeInfo` (`ONE_TIME` vs `RECURRING`) on the REST boundary and `@TypeAlias` in MongoDB.
 - **Exact Monetary Precision**: All price amounts use `BigDecimal` in Java and are stored as BSON `Decimal128` in MongoDB via custom converters.
 - **Single Active Cart Guarantee & Optimistic Concurrency**:

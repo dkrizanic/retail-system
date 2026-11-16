@@ -1,15 +1,10 @@
 package com.retailsystem.cart.entity;
 
 import com.retailsystem.cart.enums.CartStatus;
-import com.retailsystem.cart.enums.ItemAction;
-import com.retailsystem.cart.exception.DomainValidationException;
-import com.retailsystem.cart.exception.InvalidCartStateException;
-import com.retailsystem.cart.exception.ResourceNotFoundException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
 import java.util.UUID;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.PersistenceCreator;
@@ -32,7 +27,6 @@ public class ShoppingCart {
     private Long version;
 
     public ShoppingCart(String customerId) {
-        validateCustomerId(customerId);
         Instant now = Instant.now();
         this.id = UUID.randomUUID().toString();
         this.customerId = customerId;
@@ -53,22 +47,12 @@ public class ShoppingCart {
             Instant completedAt,
             Long version
     ) {
-        validateCustomerId(customerId);
-        if (status == null) {
-            throw new DomainValidationException("Cart status is required");
-        }
-        if (items != null && items.stream().anyMatch(Objects::isNull)) {
-            throw new DomainValidationException("Cart items must not contain null elements");
-        }
-        this.id = id != null && !id.isBlank() ? id : UUID.randomUUID().toString();
+        this.id = id;
         this.customerId = customerId;
         this.status = status;
         this.items = items != null ? new ArrayList<>(items) : new ArrayList<>();
-        if (this.status == CartStatus.CHECKED_OUT && this.items.isEmpty()) {
-            throw new InvalidCartStateException("Cannot check out an empty shopping cart");
-        }
-        this.createdAt = createdAt != null ? createdAt : Instant.now();
-        this.updatedAt = updatedAt != null ? updatedAt : this.createdAt;
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
         this.completedAt = completedAt;
         this.version = version;
     }
@@ -77,55 +61,31 @@ public class ShoppingCart {
         return new ShoppingCart(customerId);
     }
 
-    public CartItem addItem(String offerId, ItemAction action, List<Price> prices) {
-        ensureActive();
-        CartItem item = new CartItem(offerId, action, prices);
+    public void addItem(CartItem item) {
         this.items.add(item);
         this.updatedAt = Instant.now();
-        return item;
     }
 
-    public void removeItem(String itemId) {
-        ensureActive();
-        if (itemId == null || itemId.isBlank()) {
-            throw new ResourceNotFoundException("Cart item not found: " + itemId);
-        }
+    public boolean removeItemById(String itemId) {
         boolean removed = this.items.removeIf(item -> item.itemId().equals(itemId));
-        if (!removed) {
-            throw new ResourceNotFoundException("Cart item not found: " + itemId);
+        if (removed) {
+            this.updatedAt = Instant.now();
         }
-        this.updatedAt = Instant.now();
+        return removed;
     }
 
-    public void evict() {
-        ensureActive();
+    public void markEvicted() {
         Instant now = Instant.now();
         this.status = CartStatus.EVICTED;
         this.updatedAt = now;
         this.completedAt = now;
     }
 
-    public void checkout() {
-        ensureActive();
-        if (this.items.isEmpty()) {
-            throw new InvalidCartStateException("Cannot check out an empty shopping cart");
-        }
+    public void markCheckedOut() {
         Instant now = Instant.now();
         this.status = CartStatus.CHECKED_OUT;
         this.updatedAt = now;
         this.completedAt = now;
-    }
-
-    private void ensureActive() {
-        if (this.status != CartStatus.ACTIVE) {
-            throw new InvalidCartStateException("Shopping cart is not active: " + this.status);
-        }
-    }
-
-    private static void validateCustomerId(String customerId) {
-        if (customerId == null || customerId.isBlank()) {
-            throw new DomainValidationException("Customer ID must not be blank");
-        }
     }
 
     public String getId() {
